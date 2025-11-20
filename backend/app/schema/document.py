@@ -10,3 +10,4 @@ class docingest(BaseModel):
     document_id: str
     content: str
     chunking_strategy: ChunkStrategy
+    num_chunks: int
