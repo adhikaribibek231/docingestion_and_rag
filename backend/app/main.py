@@ -17,3 +17,5 @@ app = FastAPI(
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+from app.api import chat, document
