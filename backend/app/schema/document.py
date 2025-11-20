@@ -6,8 +6,9 @@ class ChunkStrategy(str, Enum):
     sentence = "sentence"
     sliding = "sliding"
 
-class docingest(BaseModel):
+class DocIngest(BaseModel):
     document_id: str
-    content: str
+    external_id: str
     chunking_strategy: ChunkStrategy
     num_chunks: int
+    status: str
