@@ -5,11 +5,15 @@ from app.services.llm import call_llm
 
 
 async def answer_question(session_id: str, question: str, document_id: str | None, db):
+    # Treat empty/whitespace IDs as absent so we only restrict when a real ID is provided.
+    doc_id = document_id.strip() if document_id and document_id.strip() else None
+    use_history = doc_id is None
+
     append_message(session_id, "user", question)
-    history = get_history(session_id)
+    history = get_history(session_id) if use_history else []
 
     try:
-        retrieved_chunks = await retrieve_chunks(question, document_id=document_id)
+        retrieved_chunks = await retrieve_chunks(question, document_id=doc_id)
     except Exception as exc:
         raise RuntimeError(f"Retrieval failed: {exc}") from exc
 

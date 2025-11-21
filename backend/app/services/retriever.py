@@ -4,6 +4,8 @@ from qdrant_client import models
 
 
 async def retrieve_chunks(query: str, document_id: str | None = None, top_k: int = 5):
+    document_id = document_id.strip() if document_id and document_id.strip() else None
+
     if qdrant is None:
         raise RuntimeError("Qdrant client is unavailable. Please start Qdrant before querying.")
 
