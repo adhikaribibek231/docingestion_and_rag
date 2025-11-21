@@ -4,10 +4,12 @@ from qdrant_client import models
 
 
 async def retrieve_chunks(query: str, document_id: str | None = None, top_k: int = 5):
-    # 1. Embed query → returns list, so take first vector
+    # 1. Embed query → convert numpy → python list
     query_embedding = await embed_chunks(query)
-    vector = query_embedding[0]
-
+    vector = query_embedding.tolist()
+    print("EMBED RETURN:", query_embedding)
+    print("TYPE:", type(query_embedding), "FIRST ITEM TYPE:", type(query_embedding[0]))
+    print("LEN:", len(query_embedding[0]) if hasattr(query_embedding[0], "__len__") else "NOT A VECTOR")
     # 2. Optional filter
     q_filter = None
     if document_id:
@@ -20,17 +22,13 @@ async def retrieve_chunks(query: str, document_id: str | None = None, top_k: int
             ]
         )
 
-    # 3. Build query block
-    query_block = models.QueryVector(
-        vector=vector
-    )
-
     # 4. Query Qdrant
     response = qdrant.query_points(
         collection_name="palm_docs",
-        query=query_block,
+        query=vector,              
         limit=top_k,
-        with_payload=True
+        with_payload=True,
+        query_filter=q_filter       
     )
 
     results = response.points
@@ -38,10 +36,11 @@ async def retrieve_chunks(query: str, document_id: str | None = None, top_k: int
     chunks = []
     for item in results:
         chunks.append({
-            "text": item.payload.get("chunk", ""),
+            "text": item.payload.get("text", ""),
             "document_id": item.payload.get("document_id"),
-            "chunk_id": item.id,
+            "chunk_id": item.payload.get("chunk_id"),
             "score": item.score
         })
+
 
     return chunks

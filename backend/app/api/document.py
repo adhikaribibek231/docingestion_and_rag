@@ -43,7 +43,8 @@ async def ingest_document(
     for i in range(len(chunks)):
         store_vector(
             # id=f"{external_id}-{i}",
-            id =i,
+            id=str(uuid4()),
+            # id =i,
             vector=embeddings[i],
             payload={
                 "text": chunks[i],
