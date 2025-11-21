@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from app.schema.chat import ChatMessage, ChatResponse
@@ -16,19 +16,25 @@ async def chat_message(
 ):
 
     if is_booking_request(chat_request.query):
-        result = await handle_booking(
-            user_id=chat_request.session_id,
-            user_text=chat_request.query,
-            db=session
-        )
+        try:
+            result = await handle_booking(
+                user_id=chat_request.session_id,
+                user_text=chat_request.query,
+                db=session
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"Booking pipeline failed: {exc}")
         return ChatResponse(booking=result)
 
-    result = await rag_pipeline.answer_question(
-        session_id=chat_request.session_id,
-        question=chat_request.query,
-        document_id=chat_request.document_id,
-        db=session
-    )
+    try:
+        result = await rag_pipeline.answer_question(
+            session_id=chat_request.session_id,
+            question=chat_request.query,
+            document_id=chat_request.document_id,
+            db=session
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Chat pipeline failed: {exc}")
 
     return ChatResponse(
         answer=result["answer"],

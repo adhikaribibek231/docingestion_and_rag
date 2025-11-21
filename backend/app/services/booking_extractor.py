@@ -1,6 +1,107 @@
-from app.services.llm import call_llm
-import re
 import json
+import re
+
+from app.services.llm import call_llm
+
+
+TIME_REGEX = re.compile(
+    r"\b(?:(?:1[0-2]|0?\d)(?::[0-5]\d)?\s?(?:am|pm)|noon|midnight)\b",
+    re.IGNORECASE,
+)
+WEEKDAY_REGEX = re.compile(
+    r"\b(?:next|this|coming)?\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+    re.IGNORECASE,
+)
+
+
+def _fallback_extract(document_text: str):
+    """Simple regex-based extraction to use when LLM output is unusable."""
+    email_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", document_text)
+    time_match = TIME_REGEX.search(document_text)
+    date_match = WEEKDAY_REGEX.search(document_text)
+
+    name_match = re.search(
+        r"(?:my name is|i am|i'm|this is)\s+([A-Za-z][A-Za-z\s\.'-]{0,40})",
+        document_text,
+        re.IGNORECASE,
+    )
+
+    return {
+        "name": name_match.group(1).strip() if name_match else None,
+        "email": email_match.group(0) if email_match else None,
+        "date": date_match.group(0) if date_match else None,
+        "time": time_match.group(0) if time_match else None,
+    }
+
+
+def _sanitize_data(data: dict, document_text: str):
+    """Ensure extracted fields are substrings of the original text and fix overlaps."""
+    clean_text = re.sub(r"[^a-zA-Z0-9 ]", " ", document_text.lower())
+
+    def _clean_value(key):
+        val = data.get(key)
+        if not isinstance(val, str):
+            return None
+        val = val.strip()
+        return val if val else None
+
+    name = _clean_value("name")
+    email = _clean_value("email")
+    date = _clean_value("date")
+    time = _clean_value("time")
+
+    if name:
+        clean_name = re.sub(r"[^a-zA-Z0-9 ]", " ", name.lower())
+        if clean_name not in clean_text:
+            print("Name not found in original text (fuzzy check), dropping it.")
+            name = None
+
+    if email and email not in document_text:
+        print("Email not found in original text, dropping it.")
+        email = None
+
+    # If the date is actually just a time phrase, drop it and let time capture it.
+    if date and TIME_REGEX.fullmatch(date):
+        date = None
+
+    # If a time is embedded inside the date, split it out.
+    if date:
+        embedded_time = TIME_REGEX.search(date)
+        if embedded_time:
+            if not time:
+                time = embedded_time.group(0)
+            date = date[: embedded_time.start()].rstrip(" ,.-")
+        if date.lower().startswith("at "):
+            date = date[3:].lstrip()
+        if not date:
+            date = None
+
+    # Backfill missing date/time from the raw text when possible.
+    if not time:
+        time_match = TIME_REGEX.search(document_text)
+        time = time_match.group(0) if time_match else None
+    if not date:
+        date_match = WEEKDAY_REGEX.search(document_text)
+        date = date_match.group(0) if date_match else None
+
+    data["name"] = name
+    data["email"] = email
+    data["date"] = date
+    data["time"] = time
+    return data
+
+
+def _parse_llm_json(raw_answer: str, document_text: str):
+    blocks = re.findall(r"\{.*?\}", raw_answer, flags=re.DOTALL)
+    for block in blocks:
+        try:
+            data = json.loads(block)
+            print("Extracted JSON:", block)
+            return _sanitize_data(data, document_text)
+        except json.JSONDecodeError as exc:
+            print("JSON decode ERROR:", exc)
+            continue
+    return None
 
 
 async def extract_booking_info(document_text: str):
@@ -44,50 +145,28 @@ async def extract_booking_info(document_text: str):
         "6) Do NOT wrap the JSON in ```.\n"
         "7) Do NOT output multiple JSON objects.\n"
         "8) Do NOT include any text before or after the JSON.\n"
+        "9) Do NOT include ellipses '...' as values; return null when unsure.\n"
     )
-
 
     messages = [
         {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": f"Extract the booking details from:\n\n{document_text}",
-        }
+        },
     ]
 
-    raw_answer = await call_llm(messages)
+    try:
+        raw_answer = await call_llm(messages)
+    except Exception as exc:
+        print(f"Booking extractor LLM call failed: {exc}")
+        return _fallback_extract(document_text)
+
     print("RAW DEEPSEEK OUTPUT:", raw_answer)
 
-    # 1) Grab first JSON-looking block
-    blocks = re.findall(r'\{[^{}]*\}', raw_answer)
-    if not blocks:
-        print("Regex FAILED!")
-        return {"name": None, "email": None, "date": None, "time": None}
+    parsed = _parse_llm_json(raw_answer, document_text)
+    if parsed:
+        return parsed
 
-    json_str = blocks[0]
-    print("Extracted JSON:", json_str)
-
-    # 2) Parse JSON
-    try:
-        data = json.loads(json_str)
-    except Exception as e:
-        print("JSON decode ERROR:", e)
-        return {"name": None, "email": None, "date": None, "time": None}
-
-    # 3) VALIDATION: make sure name/email actually appear in original text
-    text_lower = document_text.lower()
-
-    name = data.get("name")
-    clean_text = re.sub(r'[^a-zA-Z0-9 ]', ' ', document_text.lower())
-    clean_name = re.sub(r'[^a-zA-Z0-9 ]', ' ', name.lower()) if name else None
-
-    if clean_name and clean_name not in clean_text:
-        print("Name not found in original text (fuzzy check), dropping it.")
-        data["name"] = None
-
-    email = data.get("email")
-    if email and email not in document_text:
-        print("Email not found in original text, dropping it.")
-        data["email"] = None
-
-    return data
+    print("LLM output unusable, falling back to regex extraction.")
+    return _sanitize_data(_fallback_extract(document_text), document_text)

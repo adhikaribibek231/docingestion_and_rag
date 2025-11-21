@@ -27,14 +27,20 @@ def _detect_file_type(content_type: Optional[str], filename: Optional[str]) -> O
 def _extract_text_from_pdf(contents: bytes) -> str:
     text = []
     buffer = BytesIO(contents)
-    with pdfplumber.open(buffer) as pdf:
-        for page in pdf.pages:
-            text.append(page.extract_text() or "")
+    try:
+        with pdfplumber.open(buffer) as pdf:
+            for page in pdf.pages:
+                text.append(page.extract_text() or "")
+    except Exception as exc:
+        raise RuntimeError(f"Failed to read PDF: {exc}") from exc
     return "\n".join(text)
 
 
 def _extract_text_from_txt(contents: bytes) -> str:
-    return contents.decode("utf-8", errors="ignore")
+    try:
+        return contents.decode("utf-8", errors="ignore")
+    except Exception as exc:
+        raise RuntimeError(f"Failed to decode text file: {exc}") from exc
 
 
 def extract_text(contents: bytes, content_type: Optional[str] = None, filename: Optional[str] = None) -> str:
