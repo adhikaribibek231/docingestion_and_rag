@@ -4,6 +4,7 @@ import re
 from app.services.llm import call_llm
 
 
+EMAIL_REGEX = re.compile(r"[\w\.-]+@[\w\.-]+\.\w+")
 TIME_REGEX = re.compile(
     r"\b(?:(?:1[0-2]|0?\d)(?::[0-5]\d)?\s?(?:am|pm)|noon|midnight)\b",
     re.IGNORECASE,
@@ -16,7 +17,7 @@ WEEKDAY_REGEX = re.compile(
 
 def _fallback_extract(document_text: str):
     """Simple regex-based extraction to use when LLM output is unusable."""
-    email_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", document_text)
+    email_match = EMAIL_REGEX.search(document_text)
     time_match = TIME_REGEX.search(document_text)
     date_match = WEEKDAY_REGEX.search(document_text)
 
@@ -76,7 +77,10 @@ def _sanitize_data(data: dict, document_text: str):
         if not date:
             date = None
 
-    # Backfill missing date/time from the raw text when possible.
+    # Backfill missing fields from the raw text when possible.
+    if not email:
+        email_match = EMAIL_REGEX.search(document_text)
+        email = email_match.group(0) if email_match else None
     if not time:
         time_match = TIME_REGEX.search(document_text)
         time = time_match.group(0) if time_match else None
@@ -92,7 +96,7 @@ def _sanitize_data(data: dict, document_text: str):
 
 
 def _parse_llm_json(raw_answer: str, document_text: str):
-    blocks = re.findall(r"\{.*?\}", raw_answer, flags=re.DOTALL)
+    blocks = re.findall(r"\\{.*?\\}", raw_answer, flags=re.DOTALL)
     for block in blocks:
         try:
             data = json.loads(block)
@@ -108,51 +112,51 @@ async def extract_booking_info(document_text: str):
     print("DeepSeek extractor called")
 
     system_prompt = (
-        "You are a strict meeting booking extraction assistant.\n"
-        "\n"
-        "Your ONLY job is to extract 4 fields from the user's message:\n"
-        "- name\n"
-        "- email\n"
-        "- date\n"
-        "- time\n"
-        "\n"
-        "CRITICAL RULES:\n"
-        "1) Every value you output MUST be an exact substring of the user's message.\n"
-        "   - Do NOT invent, modify, or correct names or emails.\n"
-        "   - If the message says 'I am Bibek', the name must be exactly 'Bibek'.\n"
-        "   - If you cannot clearly find the name, set name to null.\n"
-        "\n"
-        "2) A DATE is ANY natural-language phrase that refers to a day or date.\n"
-        "   Examples: 'tomorrow', 'next Friday', 'this coming Monday', 'July 5', 'next Sunday at 3pm'.\n"
-        "   - You must return the date EXACTLY as it appears in the text.\n"
-        "   - Do NOT convert, expand, or interpret dates.\n"
-        "\n"
-        "3) A TIME is ANY time-like phrase.\n"
-        "   Examples: '3pm', '14:30', '10 am', 'noon'.\n"
-        "   - Return it EXACTLY as written.\n"
-        "\n"
-        "4) NEVER compute or infer anything.\n"
-        "   - Do NOT guess names.\n"
-        "   - Do NOT guess emails.\n"
-        "   - Do NOT fix spelling.\n"
-        "   - If a field is not clearly present, set it to null.\n"
-        "\n"
-        "5) Output format:\n"
-        "   You MUST return ONLY a single JSON object, no arrays, no markdown, no explanation.\n"
-        "   It MUST look exactly like this shape:\n"
-        '   {\"name\": ..., \"email\": ..., \"date\": ..., \"time\": ...}\n'
-        "\n"
-        "6) Do NOT wrap the JSON in ```.\n"
-        "7) Do NOT output multiple JSON objects.\n"
-        "8) Do NOT include any text before or after the JSON.\n"
-        "9) Do NOT include ellipses '...' as values; return null when unsure.\n"
+        "You are a strict meeting booking extraction assistant.\\n"
+        "\\n"
+        "Your ONLY job is to extract 4 fields from the user's message:\\n"
+        "- name\\n"
+        "- email\\n"
+        "- date\\n"
+        "- time\\n"
+        "\\n"
+        "CRITICAL RULES:\\n"
+        "1) Every value you output MUST be an exact substring of the user's message.\\n"
+        "   - Do NOT invent, modify, or correct names or emails.\\n"
+        "   - If the message says 'I am Bibek', the name must be exactly 'Bibek'.\\n"
+        "   - If you cannot clearly find the name, set name to null.\\n"
+        "\\n"
+        "2) A DATE is ANY natural-language phrase that refers to a day or date.\\n"
+        "   Examples: 'tomorrow', 'next Friday', 'this coming Monday', 'July 5', 'next Sunday at 3pm'.\\n"
+        "   - You must return the date EXACTLY as it appears in the text.\\n"
+        "   - Do NOT convert, expand, or interpret dates.\\n"
+        "\\n"
+        "3) A TIME is ANY time-like phrase.\\n"
+        "   Examples: '3pm', '14:30', '10 am', 'noon'.\\n"
+        "   - Return it EXACTLY as written.\\n"
+        "\\n"
+        "4) NEVER compute or infer anything.\\n"
+        "   - Do NOT guess names.\\n"
+        "   - Do NOT guess emails.\\n"
+        "   - Do NOT fix spelling.\\n"
+        "   - If a field is not clearly present, set it to null.\\n"
+        "\\n"
+        "5) Output format:\\n"
+        "   You MUST return ONLY a single JSON object, no arrays, no markdown, no explanation.\\n"
+        "   It MUST look exactly like this shape:\\n"
+        '   {\"name\": ..., \"email\": ..., \"date\": ..., \"time\": ...}\\n'
+        "\\n"
+        "6) Do NOT wrap the JSON in ```.\\n"
+        "7) Do NOT output multiple JSON objects.\\n"
+        "8) Do NOT include any text before or after the JSON.\\n"
+        "9) Do NOT include ellipses '...' as values; return null when unsure.\\n"
     )
 
     messages = [
         {"role": "system", "content": system_prompt},
         {
             "role": "user",
-            "content": f"Extract the booking details from:\n\n{document_text}",
+            "content": f"Extract the booking details from:\\n\\n{document_text}",
         },
     ]
 

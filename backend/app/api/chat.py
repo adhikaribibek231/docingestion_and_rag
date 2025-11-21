@@ -5,7 +5,7 @@ from app.schema.chat import ChatMessage, ChatResponse
 from app.db.session import get_session
 from app.services import rag_pipeline
 from app.services.booking_intent import is_booking_request
-from app.services.booking_pipeline import handle_booking
+from app.services.booking_pipeline import handle_booking, has_booking_draft
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ async def chat_message(
     session: Session = Depends(get_session)
 ):
 
-    if is_booking_request(chat_request.query):
+    if is_booking_request(chat_request.query) or has_booking_draft(chat_request.session_id):
         try:
             result = await handle_booking(
                 user_id=chat_request.session_id,
