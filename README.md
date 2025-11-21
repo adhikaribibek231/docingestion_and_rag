@@ -182,7 +182,7 @@ The backend:
 ```
 {
   "session_id": "book1",
-  "query": "Book an interview tomorrow at 10am for Alex. Email alex@example.com"
+  "query": "My name is Ram Prasad. Book me an appointment for next Tuesday at 8pm. my email is ram@gamil.com"
 }
 ```
 
@@ -190,9 +190,18 @@ Response:
 
 ```
 {
-  "answer": "Your interview with Alex (alex@example.com) is booked on 2025-11-19 at 10:00.",
-  "session_id": "book1"
+  "answer": "Ram Prasad, Your interview is booked for 2025-11-25 at 20:00. We'll reach out at ram@gamil.com.",
+  "sources": [],
+  "booking": {
+    "error": false,
+    "booking_id": 16,
+    "name": "Ram Prasad",
+    "email": "ram@gamil.com",
+    "datetime": "2025-11-25T20:00:00",
+    "message": "Ram Prasad, Your interview is booked for 2025-11-25 at 20:00. We'll reach out at ram@gamil.com."
+  }
 }
+
 ```
 
 Booking is saved in SQLite.
