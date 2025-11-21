@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from app.core.config import settings
 from contextlib import asynccontextmanager
 from app.db.session import init_db
