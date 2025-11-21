@@ -39,6 +39,27 @@ def _sanitize_data(data: dict, document_text: str):
     """Ensure extracted fields are substrings of the original text and fix overlaps."""
     clean_text = re.sub(r"[^a-zA-Z0-9 ]", " ", document_text.lower())
 
+    def _clean_name(name_value):
+        if not isinstance(name_value, str):
+            return None
+        name_value = name_value.strip()
+        if not name_value:
+            return None
+        # Keep only the first line and cut at common sentence punctuation.
+        name_value = name_value.splitlines()[0].strip()
+        name_value = re.split(r"[.;!?]", name_value)[0].strip()
+        # Avoid unreasonably long names that likely captured the full request.
+        if len(name_value) > 60:
+            name_value = name_value[:60].rsplit(" ", 1)[0].strip()
+        if not name_value:
+            return None
+        # Drop obvious request keywords that indicate we grabbed the whole utterance.
+        request_tokens = {"book", "booking", "appointment", "schedule", "meeting", "interview", "reserve"}
+        words = set(name_value.lower().split())
+        if request_tokens & words:
+            return None
+        return name_value
+
     def _clean_value(key):
         val = data.get(key)
         if not isinstance(val, str):
@@ -46,7 +67,7 @@ def _sanitize_data(data: dict, document_text: str):
         val = val.strip()
         return val if val else None
 
-    name = _clean_value("name")
+    name = _clean_name(data.get("name"))
     email = _clean_value("email")
     date = _clean_value("date")
     time = _clean_value("time")

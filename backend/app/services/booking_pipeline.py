@@ -56,8 +56,8 @@ def _missing_message(missing: list[str]) -> str:
     if not parts:
         return "I'm sorry, I need a bit more info to book this."
     if len(parts) == 1:
-        return f"I’m sorry, I didn’t get {parts[0]}. Could you share it?"
-    return f"I’m sorry, I didn’t get {', '.join(parts[:-1])} or {parts[-1]}. Could you share them?"
+        return f"I'm sorry, I didn't get {parts[0]}. Could you share it?"
+    return f"I'm sorry, I didn't get {', '.join(parts[:-1])} or {parts[-1]}. Could you share them?"
 
 
 async def handle_booking(user_id: str, user_text: str, db: Session):
@@ -87,7 +87,7 @@ async def handle_booking(user_id: str, user_text: str, db: Session):
         _save_draft(user_id, merged)
         return {
             "error": True,
-            "message": "I couldn’t understand the appointment date/time. Please share the day and time, e.g. 'next Friday at 3pm'.",
+            "message": "I couldn't understand the appointment date/time. Please share the day and time, e.g. 'next Friday at 3pm'.",
             "missing": ["date", "time"],
             "collected": merged,
         }
@@ -119,6 +119,14 @@ async def handle_booking(user_id: str, user_text: str, db: Session):
             "collected": merged
         }
 
+    confirmation_message = (
+        f"Your interview is booked for {meeting_datetime.strftime('%Y-%m-%d at %H:%M')}."
+    )
+    if merged.get("name"):
+        confirmation_message = f"{merged['name']}, " + confirmation_message
+    if merged.get("email"):
+        confirmation_message += f" We'll reach out at {merged['email']}."
+
     _clear_draft(user_id)
     return {
         "error": False,
@@ -126,4 +134,5 @@ async def handle_booking(user_id: str, user_text: str, db: Session):
         "name": merged["name"],
         "email": merged["email"],
         "datetime": meeting_datetime,
+        "message": confirmation_message,
     }
