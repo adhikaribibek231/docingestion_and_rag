@@ -11,9 +11,11 @@ class RetrievedChunk(BaseModel):
 
 class ChatMessage(BaseModel):
     session_id: str
-    message: str
+    query: str
+    document_id: str | None = None
 
 
 class ChatResponse(BaseModel):
-    answer: str
-    sources: List[RetrievedChunk]
+    answer: str | None = None
+    sources: List[RetrievedChunk] | None = None
+    booking: dict | None = None

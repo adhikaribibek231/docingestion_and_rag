@@ -18,4 +18,3 @@ async def retrieve_chunks(query: str, top_k: int = 5):
             "score": item.score
         })
     return chunks
-
