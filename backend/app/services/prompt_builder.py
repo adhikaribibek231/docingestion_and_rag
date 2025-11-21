@@ -1,4 +1,6 @@
-def build_prompt(history, retrieved_chunks, question):
+from typing import Any, Dict, List
+def build_prompt(history: List[Dict[str, Any]], retrieved_chunks: List[Dict[str, Any]], question: str) -> List[Dict[str, str]]:
+    """Lay out the system context, a few recent turns, and the user's question."""
     system_message = {
             "role": "system",
             "content": (
@@ -25,3 +27,5 @@ def build_prompt(history, retrieved_chunks, question):
             "content": question
         }
     return [system_message, context_message] + history_messages + [user_message]
+"""Build chat prompts that combine system, context, history, and user question."""
+

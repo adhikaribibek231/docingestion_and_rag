@@ -1,9 +1,15 @@
+"""Vector retrieval against Qdrant with optional document filter."""
+import logging
+from typing import Any, Dict, List, Optional
+
 from app.services.embedings import embed_chunks
 from app.services.vector_store import qdrant
 from qdrant_client import models
 
+logger = logging.getLogger(__name__)
 
-async def retrieve_chunks(query: str, document_id: str | None = None, top_k: int = 5):
+
+async def retrieve_chunks(query: str, document_id: Optional[str] = None, top_k: int = 5) -> List[Dict[str, Any]]:
     document_id = document_id.strip() if document_id and document_id.strip() else None
 
     if qdrant is None:
@@ -13,6 +19,7 @@ async def retrieve_chunks(query: str, document_id: str | None = None, top_k: int
         query_embedding = await embed_chunks(query)
         vector = query_embedding.tolist()
     except Exception as exc:
+        logger.error("Failed to embed query: %s", exc)
         raise RuntimeError(f"Failed to embed query: {exc}") from exc
 
     q_filter = None
@@ -35,6 +42,7 @@ async def retrieve_chunks(query: str, document_id: str | None = None, top_k: int
             query_filter=q_filter
         )
     except Exception as exc:
+        logger.error("Failed to query Qdrant: %s", exc)
         raise RuntimeError(f"Failed to query Qdrant: {exc}") from exc
 
     results = response.points

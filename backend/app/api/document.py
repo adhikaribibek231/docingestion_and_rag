@@ -1,3 +1,7 @@
+"""Document ingestion endpoint: extract text, chunk, embed, and store vectors."""
+import logging
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Query
 from app.schema.document import DocIngest, ChunkStrategy
 from app.services.text_extractor import extract_text
@@ -6,34 +10,37 @@ from app.services.embedings import embed_chunks
 from app.services.vector_store import store_vector, ensure_collection
 from app.db.session import get_session
 from sqlmodel import Session
-from uuid import uuid4
 from app.models.document import Document
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 try:
     ensure_collection()
 except Exception as exc:
-    print(f"Qdrant collection bootstrap failed: {exc}")
+    logger.warning("Qdrant collection bootstrap failed: %s", exc)
 
 @router.post("/ingestion/", response_model = DocIngest)
 async def ingest_document(
     file: UploadFile = File(...),
     chunking_strategy: ChunkStrategy = Query(default=ChunkStrategy.fixed),
     session: Session = Depends(get_session)
-):
+) -> DocIngest:
+    """Read a file, chunk it, embed the chunks, and save vectors and metadata."""
+    logger.info("Starting document ingest for file %s", file.filename)
     contents = await file.read()
     try:
         text = extract_text(contents, content_type=file.content_type, filename=file.filename)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception:
+    except Exception as exc:
+        logger.error("Failed to extract text: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to extract text from file")
-    # print ('The length of text is:',len(text))
 
     try:
         ensure_collection()
     except Exception as exc:
+        logger.error("Vector store unavailable: %s", exc)
         raise HTTPException(status_code=503, detail=f"Vector store unavailable: {exc}")
 
     try:
@@ -46,6 +53,7 @@ async def ingest_document(
     try:
         embeddings = await embed_chunks(chunks)
     except Exception as exc:
+        logger.error("Embedding failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"Embedding failed: {exc}")
     if len(embeddings) != len(chunks):
         raise HTTPException(status_code=500, detail="embedding failed, not same number of embeddings and chunks")
@@ -61,6 +69,7 @@ async def ingest_document(
         session.commit()
     except Exception as exc:
         session.rollback()
+        logger.error("Failed to persist document metadata: %s", exc)
         raise HTTPException(status_code=500, detail=f"Failed to persist document metadata: {exc}")
 
     for i in range(len(chunks)):
@@ -77,9 +86,10 @@ async def ingest_document(
             )
         except Exception as exc:
             session.rollback()
+            logger.error("Failed to store vector for document %s: %s", external_id, exc)
             raise HTTPException(status_code=503, detail=f"Failed to store vector: {exc}")
 
-
+    logger.info("Document %s stored with %s chunks", external_id, len(chunks))
     return DocIngest(
         document_id=external_id,
         external_id=external_id,

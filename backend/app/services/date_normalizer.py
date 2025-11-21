@@ -1,6 +1,10 @@
+"""Normalize fuzzy weekday/time phrases into concrete date/time strings."""
+import logging
+import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import re
+
+logger = logging.getLogger(__name__)
 
 NP_TZ = ZoneInfo("Asia/Kathmandu")
 
@@ -15,10 +19,12 @@ WEEKDAYS = {
     "sunday": 6,
 }
 
-def parse_time(raw_time: str):
+
+def parse_time(raw_time: str) -> str | None:
+    """Convert time strings like '3pm' or '14:30' to 24h HH:MM."""
     raw_time = raw_time.lower().strip()
 
-    # 3pm → 15:00
+    # 3pm -> 15:00
     match = re.match(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", raw_time)
     if not match:
         return None
@@ -35,10 +41,9 @@ def parse_time(raw_time: str):
     return f"{hour:02d}:{minute:02d}"
 
 
-def normalize_date_time(raw_date: str, raw_time: str):
-    print("\n--- NEW NORMALIZER DEBUG ---")
-    print("Raw date:", raw_date)
-    print("Raw time:", raw_time)
+def normalize_date_time(raw_date: str, raw_time: str) -> tuple[str, str] | None:
+    """Turn phrases like 'next Friday at 3pm' into a YYYY-MM-DD and HH:MM."""
+    logger.debug("Normalizing date/time: %s ; %s", raw_date, raw_time)
 
     now = datetime.now(NP_TZ)
 
@@ -50,7 +55,7 @@ def normalize_date_time(raw_date: str, raw_time: str):
             today_weekday = now.weekday()
             days_ahead = (weekday_num - today_weekday) % 7
 
-            # "next Friday" → skip this week
+            # "next Friday" -> skip this week
             if "next" in raw_date and days_ahead == 0:
                 days_ahead = 7
 
@@ -63,12 +68,11 @@ def normalize_date_time(raw_date: str, raw_time: str):
 
             final_time = parse_time(raw_time)
             if not final_time:
-                print("TIME FAILED PARSING")
+                logger.info("Time failed parsing for date phrase %s", raw_date)
                 return None
 
-            print("Parsed date:", final_date)
-            print("Parsed time:", final_time)
+            logger.debug("Parsed date/time: %s %s", final_date, final_time)
             return final_date, final_time
 
-    print("NO WEEKDAY FOUND. Cannot parse.")
+    logger.info("No recognizable weekday in phrase '%s'", raw_date)
     return None

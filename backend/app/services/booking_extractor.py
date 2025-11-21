@@ -1,7 +1,12 @@
+"""Booking field extraction via LLM with a regex safety net."""
 import json
+import logging
 import re
+from typing import Any, Dict, Optional
 
 from app.services.llm import call_llm
+
+logger = logging.getLogger(__name__)
 
 
 EMAIL_REGEX = re.compile(r"[\w\.-]+@[\w\.-]+\.\w+")
@@ -15,8 +20,8 @@ WEEKDAY_REGEX = re.compile(
 )
 
 
-def _fallback_extract(document_text: str):
-    """Simple regex-based extraction to use when LLM output is unusable."""
+def _fallback_extract(document_text: str) -> Dict[str, Optional[str]]:
+    """Basic regex grab when the LLM reply is missing or broken."""
     email_match = EMAIL_REGEX.search(document_text)
     time_match = TIME_REGEX.search(document_text)
     date_match = WEEKDAY_REGEX.search(document_text)
@@ -27,19 +32,21 @@ def _fallback_extract(document_text: str):
         re.IGNORECASE,
     )
 
-    return {
+    extracted = {
         "name": name_match.group(1).strip() if name_match else None,
         "email": email_match.group(0) if email_match else None,
         "date": date_match.group(0) if date_match else None,
         "time": time_match.group(0) if time_match else None,
     }
+    logger.debug("Fallback extractor values: %s", extracted)
+    return extracted
 
 
-def _sanitize_data(data: dict, document_text: str):
-    """Ensure extracted fields are substrings of the original text and fix overlaps."""
+def _sanitize_data(data: Dict[str, Any], document_text: str) -> Dict[str, Optional[str]]:
+    """Clean noisy fields and keep only values that truly appear in the message."""
     clean_text = re.sub(r"[^a-zA-Z0-9 ]", " ", document_text.lower())
 
-    def _clean_name(name_value):
+    def _clean_name(name_value: Any) -> Optional[str]:
         if not isinstance(name_value, str):
             return None
         name_value = name_value.strip()
@@ -60,7 +67,7 @@ def _sanitize_data(data: dict, document_text: str):
             return None
         return name_value
 
-    def _clean_value(key):
+    def _clean_value(key: str) -> Optional[str]:
         val = data.get(key)
         if not isinstance(val, str):
             return None
@@ -75,11 +82,11 @@ def _sanitize_data(data: dict, document_text: str):
     if name:
         clean_name = re.sub(r"[^a-zA-Z0-9 ]", " ", name.lower())
         if clean_name not in clean_text:
-            print("Name not found in original text (fuzzy check), dropping it.")
+            logger.debug("Name not confirmed in original text, dropping it")
             name = None
 
     if email and email not in document_text:
-        print("Email not found in original text, dropping it.")
+        logger.debug("Email not found in original text, dropping it")
         email = None
 
     # If the date is actually just a time phrase, drop it and let time capture it.
@@ -116,21 +123,23 @@ def _sanitize_data(data: dict, document_text: str):
     return data
 
 
-def _parse_llm_json(raw_answer: str, document_text: str):
-    blocks = re.findall(r"\\{.*?\\}", raw_answer, flags=re.DOTALL)
+def _parse_llm_json(raw_answer: str, document_text: str) -> Optional[Dict[str, Optional[str]]]:
+    """Find the first JSON object in the LLM reply and sanitize it."""
+    blocks = re.findall(r"\{.*?\}", raw_answer, flags=re.DOTALL)
     for block in blocks:
         try:
             data = json.loads(block)
-            print("Extracted JSON:", block)
+            logger.debug("Parsed booking JSON block: %s", block)
             return _sanitize_data(data, document_text)
         except json.JSONDecodeError as exc:
-            print("JSON decode ERROR:", exc)
+            logger.info("Could not decode JSON block %s: %s", block, exc)
             continue
     return None
 
 
-async def extract_booking_info(document_text: str):
-    print("DeepSeek extractor called")
+async def extract_booking_info(document_text: str) -> Dict[str, Optional[str]]:
+    """Ask the LLM for booking fields; lean on regex fallback if the reply is messy."""
+    logger.info("Booking extractor called")
 
     system_prompt = (
         "You are a strict meeting booking extraction assistant.\\n"
@@ -184,14 +193,14 @@ async def extract_booking_info(document_text: str):
     try:
         raw_answer = await call_llm(messages)
     except Exception as exc:
-        print(f"Booking extractor LLM call failed: {exc}")
+        logger.warning("Booking extractor LLM call failed: %s", exc)
         return _fallback_extract(document_text)
 
-    print("RAW DEEPSEEK OUTPUT:", raw_answer)
+    logger.debug("Raw extractor output: %s", raw_answer)
 
     parsed = _parse_llm_json(raw_answer, document_text)
     if parsed:
         return parsed
 
-    print("LLM output unusable, falling back to regex extraction.")
+    logger.info("LLM output unusable, falling back to regex extraction")
     return _sanitize_data(_fallback_extract(document_text), document_text)

@@ -1,3 +1,5 @@
+"""Chat API endpoint that routes between booking logic and RAG answers."""
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,14 +12,17 @@ from app.services.booking_intent import is_booking_request
 from app.services.booking_pipeline import handle_booking, has_booking_draft
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/message", response_model=ChatResponse, response_model_exclude_none=True)
 async def chat_message(
     chat_request: ChatMessage,
     session: Session = Depends(get_session)
-):
+) -> ChatResponse:
+    """Handle a user chat turn, branching into booking or RAG answering."""
 
     if is_booking_request(chat_request.query) or has_booking_draft(chat_request.session_id):
+        logger.info("Routing session %s to booking flow", chat_request.session_id)
         try:
             result = await handle_booking(
                 user_id=chat_request.session_id,
@@ -25,6 +30,7 @@ async def chat_message(
                 db=session
             )
         except Exception as exc:
+            logger.error("Booking pipeline failed for session %s: %s", chat_request.session_id, exc)
             raise HTTPException(status_code=503, detail=f"Booking pipeline failed: {exc}")
 
         message = result.get("message")
@@ -33,12 +39,14 @@ async def chat_message(
             date_str = dt_value.strftime("%Y-%m-%d at %H:%M") if isinstance(dt_value, datetime) else str(dt_value)
             message = f"Booking confirmed for {date_str}."
 
+        logger.debug("Booking response for session %s: %s", chat_request.session_id, message)
         return ChatResponse(
             answer=message,
             sources=[],
             booking=result
         )
 
+    logger.info("Routing session %s to RAG flow", chat_request.session_id)
     try:
         result = await rag_pipeline.answer_question(
             session_id=chat_request.session_id,
@@ -47,8 +55,10 @@ async def chat_message(
             db=session
         )
     except Exception as exc:
+        logger.error("Chat pipeline failed for session %s: %s", chat_request.session_id, exc)
         raise HTTPException(status_code=503, detail=f"Chat pipeline failed: {exc}")
 
+    logger.debug("RAG response ready for session %s", chat_request.session_id)
     return ChatResponse(
         answer=result["answer"],
         sources=result["sources"]
