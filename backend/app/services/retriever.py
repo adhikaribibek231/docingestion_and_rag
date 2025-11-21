@@ -7,9 +7,6 @@ async def retrieve_chunks(query: str, document_id: str | None = None, top_k: int
     # 1. Embed query → convert numpy → python list
     query_embedding = await embed_chunks(query)
     vector = query_embedding.tolist()
-    print("EMBED RETURN:", query_embedding)
-    print("TYPE:", type(query_embedding), "FIRST ITEM TYPE:", type(query_embedding[0]))
-    print("LEN:", len(query_embedding[0]) if hasattr(query_embedding[0], "__len__") else "NOT A VECTOR")
     # 2. Optional filter
     q_filter = None
     if document_id:

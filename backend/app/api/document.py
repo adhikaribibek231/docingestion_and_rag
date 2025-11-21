@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Query
 from app.schema.document import DocIngest, ChunkStrategy
-from app.services.text_extractor import extract_text_from_pdf
+from app.services.text_extractor import extract_text
 from app.services.chunker import chunk_text
 from app.services.embedings import embed_chunks
 from app.services.vector_store import store_vector, ensure_collection
@@ -20,7 +20,12 @@ async def ingest_document(
     session: Session = Depends(get_session)
 ):
     contents = await file.read()
-    text = extract_text_from_pdf(contents)
+    try:
+        text = extract_text(contents, content_type=file.content_type, filename=file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to extract text from file")
     # print ('The length of text is:',len(text))
 
     chunks = chunk_text(text, chunking_strategy)
@@ -56,7 +61,7 @@ async def ingest_document(
 
 
     return DocIngest(
-        document_id=file.filename,
+        document_id=external_id,
         external_id=external_id,
         chunking_strategy=chunking_strategy,
         num_chunks=len(chunks),
