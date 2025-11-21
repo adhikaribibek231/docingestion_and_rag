@@ -3,6 +3,7 @@ def build_prompt(history, retrieved_chunks, question):
             "role": "system",
             "content": (
                 "You are a helpful assistant that answers ONLY using the provided context. "
+                "Use chat history only for conversational continuity, not as a factual source. "
                 "If the context does not contain the answer, reply: 'I don't have information about that.'"
             )
         }
@@ -13,7 +14,8 @@ def build_prompt(history, retrieved_chunks, question):
             "content": f"Context:\n\n{context_str}"
         }
     history_messages = []
-    for item in history:
+    recent_history = history[-6:]
+    for item in recent_history:
         history_messages.append({
             "role": item['role'],
             "content": item['content']
