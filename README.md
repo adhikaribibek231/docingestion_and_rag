@@ -1,15 +1,3 @@
-Absolutely — here is a **clean, polished, company-neutral README.md** you can use for:
-
-✔ Your GitHub
-✔ Your resume portfolio
-✔ Technical interviews
-✔ Showcasing backend, RAG, and LLM engineering skills
-
-No Palm Mind references.
-Professional, simple, clean.
-
----
-
 # 📚 Document Ingestion + RAG Backend
 
 *A modular backend that ingests documents, stores embeddings, answers questions using a custom RAG pipeline, supports multi-turn chat memory, and performs LLM-powered interview booking.*
