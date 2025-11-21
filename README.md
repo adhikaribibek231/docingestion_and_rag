@@ -1,1 +1,16 @@
-# palm_mind_rag
+Build a backend with two REST APIs using FastAPI (or similar):
+
+Document Ingestion API
+Upload .pdf or .txt files
+Extract text, apply two chunking strategies (selectable)
+Generate embeddings & store in Pinecone/Qdrant/Weaviate/Milvus
+Save metadata in SQL/NoSQL DB
+Conversational RAG API
+Custom RAG (no RetrievalQAChain)
+Use Redis for chat memory
+Handle multi-turn queries
+Support interview booking (name, email, date, time) using  LLM
+Store booking info
+Constraints:
+
+No FAISS/Chroma, no UI, no RetrievalQAChain clean modular code following industry standards for typing and annotations
