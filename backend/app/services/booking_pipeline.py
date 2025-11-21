@@ -2,7 +2,7 @@ from sqlmodel import Session
 from datetime import datetime
 from app.models.booking import Booking
 from app.services.booking_extractor import extract_booking_info
-from app.services.date_normalizer import normalize_date_time   # <-- NEW
+from app.services.date_normalizer import normalize_date_time
 
 
 async def handle_booking(user_id: str, user_text: str, db: Session):
@@ -29,6 +29,7 @@ async def handle_booking(user_id: str, user_text: str, db: Session):
         }
 
     # 3. Normalize natural-language date/time → ISO
+    # 3. Normalize → returns ("YYYY-MM-DD", "HH:MM")
     normalized_date, normalized_time = normalize_date_time(raw_date, raw_time)
 
     if not normalized_date or not normalized_time:
@@ -38,11 +39,12 @@ async def handle_booking(user_id: str, user_text: str, db: Session):
             "extracted": extracted
         }
 
-    # 4. Build final datetime object
+    # 4. Convert to real datetime object for SQLite
     meeting_datetime = datetime.strptime(
         f"{normalized_date} {normalized_time}",
         "%Y-%m-%d %H:%M"
     )
+
 
     # 5. Save booking
     booking = Booking(
